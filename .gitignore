@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+
+# ML artifacts (trained weights — large binary files)
+artifacts/*.pt
+artifacts/*.joblib
+artifacts/*.onnx
+artifacts/model_metadata.json
+
+# Dataset cache
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store

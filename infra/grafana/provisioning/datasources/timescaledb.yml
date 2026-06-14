@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: TimescaleDB
+    type: postgres
+    url: timescaledb:5432
+    database: sensorwatch
+    user: sensorwatch
+    secureJsonData:
+      password: sensorwatch
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: true
+    isDefault: true
+    editable: false

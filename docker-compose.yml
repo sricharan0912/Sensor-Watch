@@ -1,0 +1,109 @@
+version: "3.9"
+
+services:
+
+  # ── TimescaleDB ──────────────────────────────────────────────────────────────
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sensorwatch
+      POSTGRES_PASSWORD: sensorwatch
+      POSTGRES_DB: sensorwatch
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sensorwatch -d sensorwatch"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 8
+
+  # ── SensorWatch API ───────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      TIMESCALEDB_URL: postgresql://sensorwatch:sensorwatch@timescaledb:5432/sensorwatch
+      REDIS_URL: redis://redis:6379
+      ENVIRONMENT: development
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Mount trained artifacts read-only into the container
+      - ./artifacts:/app/artifacts:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/liveness"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+  # ── Sensor Simulator (opt-in via --profile simulate) ─────────────────────────
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      python -m simulator.producer
+      --api-url http://app:8000
+      --hz 10
+      --unit 1
+      --inject-anomaly
+    env_file: .env
+    environment:
+      API_URL: http://app:8000
+    depends_on:
+      app:
+        condition: service_healthy
+    profiles:
+      - simulate
+
+  # ── Grafana (opt-in via --profile grafana) ────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: "grafana-clock-panel"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    profiles:
+      - grafana
+
+volumes:
+  timescaledb_data:
+  grafana_data:
